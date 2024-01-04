@@ -57,10 +57,22 @@ def get_all_transaction_types(file_path):
 
                 if not transaction_type in transaction_types:
                     transaction_types[transaction_type] = 1
-                    print(row[2],row[3][:600]) # print the new transaction type and its fields
                 else:
                     transaction_types[transaction_type] += 1
 
+                if transaction_type == "poc_receipts_v1":
+                    fields = json.loads(row[3])
+                    print(fields)
+                    if "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
+                        tmp_receipt = fields["path"][0]["receipt"]
+                        # gateway is gateway address or unique identifier for a node..
+                        print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
+
+                        tmp_witnesses = fields["path"][0]["witnesses"]
+                        for witness in tmp_witnesses:
+                            print("@{} {} {} {} {} {} {}".format(witness["timestamp"],witness["gateway"],witness["owner"],witness["location"],witness["signal"],witness["frequency"],witness["channel"],witness["snr"]))
+                    # for witness in fields:
+                    #     print(row[2], row[3])  # print the new transaction type and its fields
 
     return transaction_types
 
@@ -68,7 +80,7 @@ def get_all_transaction_types(file_path):
 # Example usage
 if __name__ == "__main__":
     file_path = 'data_xcx.csv'  # Replace with the path to your CSV file
-    n_rows_to_process = 1000  # Specify the number of rows to process
+    n_rows_to_process = 100  # Specify the number of rows to process
     transaction_list = get_all_transaction_types(file_path)
     print(transaction_list)
 
