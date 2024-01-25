@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # plot an analyze distance data..
-# [txlocation, location, distance_from_tx_location [,txpwr] [,rxpwr] [,timestamp]]
+# [txlocation, location, distance_from_tx_location [,txpwr] [,rxpwr] [,timestamp] [,txgateway] [,wgateway]]
 
 
 
