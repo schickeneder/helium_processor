@@ -22,18 +22,33 @@ def get_locations(node_dict):
 if __name__ == "__main__":
     file_path = 'data_xcx.csv'  # Replace with the path to your CSV file
 
+    # *************** setting up data to process
+
     # store the node_dict so we don't have to re-run and wait each time!
     pickle_file = 'node_dict_xcx.pickle'
     with open(pickle_file, 'rb') as file:
         node_dict = pickle.load(file)
 
 
+    distances = []
     for node in node_dict:
-        node_dict[node].get_witness_distances()
+        distances += node_dict[node].get_witness_distances()
+
+    pickle_file = 'measurements_xcx.pickle'
+    with open(pickle_file, 'wb') as file:
+        pickle.dump(distances,file)
 
     location_list = get_locations(node_dict)
     print(len(list(set(location_list)))) # get a unique list for an accurate count of unique locations
     print(len(node_dict))
 
+    # *************** end of setting up data to process
+
+    pickle_file = 'measurements_xcx.pickle'
+    with open(pickle_file, 'rb') as file:
+        distances = pickle.load(file)
+    for row in distances:
+        print(row)
+
     # Open an interactive Python terminal
-    code.interact(local=locals())
+    # code.interact(local=locals())

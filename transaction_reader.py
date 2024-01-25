@@ -43,7 +43,8 @@ class HeliumNode:
     def get_witness_distances(self,timestamp=False,tx=False,rx=False):
         distances = [] # list of distances and related information for a transaction
         for wevent in self.witness_transactions:
-            distance = [] # list like [txlocation, location, distance_from_tx_location [,txpwr] [,rxpwr] [,timestamp]]
+            trxdistance = [] # list like [txlocation, location,
+            # distance_from_tx_location [,txpwr] [,rxpwr] [,timestamp] [,txgateway] [,wgateway]]
             transaction = self.witness_transactions[wevent]
             timestamp = transaction.timestamp
             if not transaction.witness_dict:
@@ -52,9 +53,12 @@ class HeliumNode:
                 witness = transaction.witness_dict[gateway]
                 location = witness["location"]
                 rxpwr = witness["rxpwr"]
-            # TODO need to make sure location was defined
+                wgateway = witness["gateway"]
             distance_from_tx_location = h3.point_dist(h3.h3_to_geo(transaction.location),h3.h3_to_geo(location),unit='m')
-            print(transaction.location, location, distance_from_tx_location, transaction.txpwr, rxpwr, timestamp)
+            distances.append([transaction.location, location, distance_from_tx_location,
+                              transaction.txpwr, rxpwr, timestamp, self.gateway, wgateway])
+
+        return distances
 
 # this class stores all witness records for a single tx challenge event for a node
 class WitnessTransaction:
