@@ -23,7 +23,7 @@ Value: 9, Count: 1
 def count_mutual_witnesses(distances):
     mutuals = {}
     for row in distances:
-        if row[-2] < row[1]:
+        if str(row[-2]) < str(row[-1]):
             new_key = row[-2] + '_' + row[-1]
         else:
             new_key = row[-1] + '_' + row[-2]
@@ -48,23 +48,6 @@ def histogram_mutual_witness_events(mutuals):
 
     return value_counts
 
-# TODO need to fix this, it's crazy slow for some reason..
-def recompute_mutuals(mutuals,distances):
-    new_mutuals = {}
-    count = 0
-    for pair in mutuals:
-        count += 1
-        pair1, pair2 = pair.split('_')
-        for row in distances:
-            if pair1 in row and pair2 in row:
-                if pair not in new_mutuals:
-                    new_mutuals[pair] = 1
-                else:
-                    new_mutuals[pair] += 1
-        if not count % 100:
-            print(count)
-    return new_mutuals
-
 # returns a list of node pairs in which n mutual witness events occurred
 # a pair (or mutual) looks like: 112oz...F6PHJ4772TPYXip_11qqKtKcbYD..tuzuPwc6wBmfvu or <gateway1>_<gateway2> where
 # '<gateway1>' < '<gateway2>' in a string comparison
@@ -73,7 +56,6 @@ def return_pairs_n_counts(mutuals, n):
     for pair, counts in mutuals.items():
         if counts == n:
             pairs.append(pair)
-            print(pair,counts)
 
     return pairs
 
@@ -103,7 +85,7 @@ if __name__ == "__main__":
     # for row in mutuals:
     #     print(row)
 
-    mutuals = recompute_mutuals(mutuals,distances)
+    #mutuals = recompute_mutuals(mutuals,distances)
     value_counts = histogram_mutual_witness_events(mutuals)
     # Print the counts
     for value, count in value_counts.items():
