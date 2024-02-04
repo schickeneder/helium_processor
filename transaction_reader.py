@@ -9,9 +9,11 @@ import json
 import code
 import pickle
 import h3
+import gzip
 
 # Increase the field size limit (adjust as needed)
-csv.field_size_limit(sys.maxsize)
+csv.field_size_limit(2**30) # had sys.maxsize, but 'OverflowError: Python int too large to convert to C long'
+
 
 # helium transaction class; of the form "block,hash,type,fields,time"
 class HeliumTransaction:
@@ -98,7 +100,7 @@ def read_csv(file_path, n=-1):
     return helium_transactions
 
 # return a list of transaction types found in the file; transaction type is the third field
-def get_all_transaction_types(file_path):
+def get_all_transaction_types(file_path, print_receipts=False):
     transaction_types = {}
 
     with open(file_path, 'r', newline='') as csvfile:
@@ -116,29 +118,66 @@ def get_all_transaction_types(file_path):
                 else:
                     transaction_types[transaction_type] += 1
 
-                if transaction_type == "poc_receipts_v1":
-                    fields = json.loads(row[3])
-                    print(fields)
-                    if "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
-                        tmp_receipt = fields["path"][0]["receipt"]
-                        # gateway is gateway address or unique identifier for a node..
-                        print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
+                if print_receipts:
+                    if transaction_type == "poc_receipts_v1":
+                        fields = json.loads(row[3])
+                        print(fields)
+                        if "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
+                            tmp_receipt = fields["path"][0]["receipt"]
+                            # gateway is gateway address or unique identifier for a node..
+                            print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
 
-                        tmp_witnesses = fields["path"][0]["witnesses"]
-                        for witness in tmp_witnesses:
-                            print("@{} {} {} {} {} {} {}".format(witness["timestamp"],witness["gateway"],witness["owner"],witness["location"],witness["signal"],witness["frequency"],witness["channel"],witness["snr"]))
+                            tmp_witnesses = fields["path"][0]["witnesses"]
+                            for witness in tmp_witnesses:
+                                print("@{} {} {} {} {} {} {}".format(witness["timestamp"],witness["gateway"],witness["owner"],witness["location"],witness["signal"],witness["frequency"],witness["channel"],witness["snr"]))
+
                     # for witness in fields:
                     #     print(row[2], row[3])  # print the new transaction type and its fields
 
     return transaction_types
 
-def load_witnesses(file_path, node_dict):
-    # transaction_types = {}
+# return a list of transaction types found in the file; transaction type is the third field;
+# differes from the original in that it expects a .gz file
+def get_all_transaction_types_gz(file_path, print_receipts=False):
+    transaction_types = {}
 
-    with open(file_path, 'r', newline='') as csvfile:
+    with gzip.open(file_path, 'rt', newline='') as csvfile:
         csv_reader = csv.reader(csvfile)
         # Skip the header row if it exists
         next(csv_reader, None)
+
+        for row in csv_reader:
+            # Assuming the CSV file has five columns
+            if len(row) >= 5:
+                transaction_type = row[2]
+
+                if not transaction_type in transaction_types:
+                    transaction_types[transaction_type] = 1
+                else:
+                    transaction_types[transaction_type] += 1
+
+                if print_receipts:
+                    if transaction_type == "poc_receipts_v1" or transaction_type == "poc_receipts_v2":
+                        fields = json.loads(row[3])
+                        print(fields)
+                        if "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
+                            tmp_receipt = fields["path"][0]["receipt"]
+                            # gateway is gateway address or unique identifier for a node..
+                            print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
+
+                            tmp_witnesses = fields["path"][0]["witnesses"]
+                            for witness in tmp_witnesses:
+                                print("@{} {} {} {} {} {} {}".format(witness["timestamp"],witness["gateway"],witness["owner"],witness["location"],witness["signal"],witness["frequency"],witness["channel"],witness["snr"]))
+
+                    # for witness in fields:
+                    #     print(row[2], row[3])  # print the new transaction type and its fields
+
+    return transaction_types
+
+
+
+def load_witnesses(csv_reader, node_dict):
+    # transaction_types = {}
 
         for row in csv_reader:
             # Assuming the CSV file has five columns
@@ -150,23 +189,40 @@ def load_witnesses(file_path, node_dict):
                 # else:
                 #     transaction_types[transaction_type] += 1
 
-                if transaction_type == "poc_receipts_v1":
+                if transaction_type == "poc_receipts_v1" or transaction_type == "poc_receipts_v2":
                     fields = json.loads(row[3])
                     #print(fields)
-                    if "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
+                    if fields["path"] and "receipt" in fields["path"][0] and fields["path"][0]["receipt"]:
                         tmp_receipt = fields["path"][0]["receipt"]
                         # gateway is gateway address or unique identifier for a node..
+
+
                         if tmp_receipt["gateway"] not in node_dict:
-                            node_dict[tmp_receipt["gateway"]] = HeliumNode(tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"]) # initialize that node
-
+                            try:
+                                node_dict[tmp_receipt["gateway"]] = HeliumNode(tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"]) # initialize that node
+                            except KeyError as e:
+                                print("KeyError accessing {}".format(e.args[0]))
+                                continue
                         #print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
-
-                        tmp_witness_transaction = WitnessTransaction(tmp_receipt["timestamp"],tmp_receipt["tx_power"],fields["path"][0]["challengee_location"])
+                        try:
+                            if "tx_power" not in tmp_receipt: # sometimes it's not there so store 0 to note this
+                                tx_power = 0
+                            else:
+                                tx_power = tmp_receipt["tx_power"]
+                            tmp_witness_transaction = WitnessTransaction(tmp_receipt["timestamp"],tx_power,fields["path"][0]["challengee_location"])
+                        except KeyError as e:
+                            print("KeyError accessing {}".format(e.args[0]))
+                            continue
                         for witness in fields["path"][0]["witnesses"]:
                             #print("@{} {} {} {} {} {} {}".format(witness["timestamp"],witness["gateway"],witness["owner"],witness["location"],witness["signal"],witness["frequency"],witness["channel"],witness["snr"]))
-                            tmp_witness_transaction.add_witness(witness["timestamp"],witness["gateway"],witness["location"],witness["signal"],witness["frequency"],witness["channel"])
-
+                            try:
+                                tmp_witness_transaction.add_witness(witness["timestamp"],witness["gateway"],witness["location"],witness["signal"],witness["frequency"],witness["channel"])
+                            except KeyError as e:
+                                print("KeyError accessing {}".format(e.args[0]))
+                                continue
                         node_dict[tmp_receipt["gateway"]].add_witness_transaction(tmp_witness_transaction)
+                        #print("adding gateway {}".format(tmp_receipt["gateway"]))
+
                     # for witness in fields:
                     #     print(row[2], row[3])  # print the new transaction type and its fields
 
@@ -177,7 +233,7 @@ if __name__ == "__main__":
     file_path = 'data_xcx.csv'  # Replace with the path to your CSV file
     n_rows_to_process = 100  # Specify the number of rows to process
     node_dict = {} # we want to store nodes indexed by gateway because that will be unique
-    load_witnesses(file_path,node_dict)
+    load_witnesses(open_csv_normal(file_path), node_dict)
     #print(transaction_list)
 
     # store the node_dict so we don't have to re-run and wait each time!
