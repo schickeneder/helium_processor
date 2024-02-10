@@ -56,9 +56,13 @@ class HeliumNode:
                 location = witness["location"]
                 rxpwr = witness["rxpwr"]
                 wgateway = witness["gateway"]
-            distance_from_tx_location = h3.point_dist(h3.h3_to_geo(transaction.location),h3.h3_to_geo(location),unit='m')
-            distances.append([transaction.location, location, distance_from_tx_location,
-                              transaction.txpwr, rxpwr, timestamp, self.gateway, wgateway])
+            try:
+                distance_from_tx_location = h3.point_dist(h3.h3_to_geo(transaction.location),h3.h3_to_geo(location),unit='m')
+                distances.append([transaction.location, location, distance_from_tx_location,
+                                  transaction.txpwr, rxpwr, timestamp, self.gateway, wgateway])
+            except TypeError as e:
+                print(e)
+                print("Can't get distance for locations {} and {}".format(transaction.location,location))
 
         return distances
 
@@ -206,6 +210,9 @@ def load_witnesses(csv_reader, node_dict):
                         #print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
                         try:
                             if "tx_power" not in tmp_receipt: # sometimes it's not there so store 0 to note this
+                                # if transaction_type == "poc_receipts_v2":
+                                #     print("This is a poc_receipts_v2 transaction")
+                                # print("tx_power not in receipt: {}".format(tmp_receipt))
                                 tx_power = 0
                             else:
                                 tx_power = tmp_receipt["tx_power"]
