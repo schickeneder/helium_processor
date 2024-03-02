@@ -14,6 +14,8 @@ import gzip
 # Increase the field size limit (adjust as needed)
 csv.field_size_limit(2**30) # had sys.maxsize, but 'OverflowError: Python int too large to convert to C long'
 
+transaction_filepath = r'D:\blockchain-etl-export\transactions'
+
 
 # helium transaction class; of the form "block,hash,type,fields,time"
 class HeliumTransaction:
@@ -208,11 +210,13 @@ def load_witnesses(csv_reader, node_dict):
                                 print("KeyError accessing {}".format(e.args[0]))
                                 continue
                         #print("@{} {} {} {} {}".format(tmp_receipt["timestamp"],tmp_receipt["gateway"],fields["path"][0]["challengee_owner"],fields["path"][0]["challengee_location"],tmp_receipt["tx_power"]))
+                        # if not fields["path"][0]["challengee_location"]:  # trying to find where the missing distances occurred..
+                        #     print("challengee location not in {}".format(fields))
                         try:
                             if "tx_power" not in tmp_receipt: # sometimes it's not there so store 0 to note this
                                 # if transaction_type == "poc_receipts_v2":
                                 #     print("This is a poc_receipts_v2 transaction")
-                                # print("tx_power not in receipt: {}".format(tmp_receipt))
+                                # print("tx_power not in receipt: {}".format(fields))
                                 tx_power = 0
                             else:
                                 tx_power = tmp_receipt["tx_power"]
@@ -237,16 +241,19 @@ def load_witnesses(csv_reader, node_dict):
 
 # Example usage
 if __name__ == "__main__":
-    file_path = 'data_xcx.csv'  # Replace with the path to your CSV file
-    n_rows_to_process = 100  # Specify the number of rows to process
-    node_dict = {} # we want to store nodes indexed by gateway because that will be unique
-    load_witnesses(open_csv_normal(file_path), node_dict)
-    #print(transaction_list)
+    file_path = 'data_xep.csv.gz'  # Replace with the path to your CSV file
 
-    # store the node_dict so we don't have to re-run and wait each time!
-    pickle_file = 'node_list' + file_path.split('.')[0] + '.pickle'
-    with open(pickle_file, 'wb') as file:
-        pickle.dump(node_dict,file)
+    result = get_all_transaction_types_gz(transaction_filepath + '\\' + file_path)
+    print(result)
+    # n_rows_to_process = 100  # Specify the number of rows to process
+    # node_dict = {} # we want to store nodes indexed by gateway because that will be unique
+    # load_witnesses(open_csv_normal(file_path), node_dict)
+    # #print(transaction_list)
+    #
+    # # store the node_dict so we don't have to re-run and wait each time!
+    # pickle_file = 'node_list' + file_path.split('.')[0] + '.pickle'
+    # with open(pickle_file, 'wb') as file:
+    #     pickle.dump(node_dict,file)
 
     # Open an interactive Python terminal
     code.interact(local=locals())

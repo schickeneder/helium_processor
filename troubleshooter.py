@@ -2,6 +2,8 @@
 from transaction_reader import get_all_transaction_types_gz
 import pickle
 import time
+import code
+from pickle_maker import sort_distances,shrink_gateways
 
 # This is used to troubleshoot an issue discovered in picklemakers where it seemed to stop properly impporting data..
 # it may be that the protocol changed at some point and the parser broker?
@@ -29,13 +31,25 @@ if __name__ == "__main__":
     print("pickle load end time {} and delta {}".format(end_time,end_time-start_time))
 
     print(len(all_distances))
-    tx_nonzero_count = 0
+    no_tx_pwr_count = 0
+    no_tx_location_count = 0
+    no_location_count = 0
     for item in all_distances:
-        if item[3]:
-            tx_nonzero_count +=1
-    print(tx_nonzero_count)
+        if not item[0]:
+            no_tx_location_count += 1
+        if not item[1]:
+            no_location_count += 1
+        if not item[3]:
+            no_tx_pwr_count +=1
+    print("Counts for missing tx_location, location and tx_pwr: {} {} {}".format(
+        no_tx_location_count,no_location_count,no_tx_pwr_count))
+
+    all_distances = sort_distances(all_distances)
+    all_distances,mapping = shrink_gateways(all_distances)
+
+    file_path = transaction_filepath + "\\" + 'shrink_all_distances.pickle'
 
 
-
+    code.interact(local=locals())
 
 

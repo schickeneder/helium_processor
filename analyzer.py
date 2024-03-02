@@ -1,6 +1,6 @@
 
 # this program is used to analyze data from the helium network
-# it imports a pickle dump from transaction_reader
+# it imports a pickle dump from transaction_reader; generates the "measurements_xxx" pickle file with distances
 
 import pickle
 import code

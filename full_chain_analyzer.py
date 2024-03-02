@@ -61,7 +61,7 @@ def get_locations_and_transfers(row):
     if len(row) >= 5:
         transaction_type = row[2]
     if "assert_location" in transaction_type:
-        print(row)
+        # print(row)
         fields = json.loads(row[3])
         if "gain" in fields:
             gain = fields["gain"]
@@ -73,10 +73,10 @@ def get_locations_and_transfers(row):
             elevation = 0
         new_row = [fields["gateway"], row[4], row[0], fields["location"], fields["owner"], gain, elevation]
         # [gateway], [timestamp], [block], [location], [owner], [gain?], [elevation?]
-        print(new_row)
+        # print(new_row)
         return new_row, 0
     if "add_gateway" in transaction_type or "transfer_hotspot" in transaction_type:
-        print(row)
+        # print(row)
         fields = json.loads(row[3])
         if "seller" in fields:
             owner = fields["seller"]
@@ -91,7 +91,7 @@ def get_locations_and_transfers(row):
         new_row = [fields["gateway"], row[4], row[0], owner, new_owner]
         # [gateway], [timestamp], [block], [old_owner=0], [new_owner]
 
-        print(new_row)
+        # print(new_row)
         return 0, new_row
     return 0, 0
 
@@ -158,12 +158,17 @@ if __name__ == "__main__":
 
     csvgz_files = find_csv_files(transaction_filepath)
 
+    final_result1 = []
+    final_result2 = []
     for csvgz_file in csvgz_files:
 
-        if "data_xep" in csvgz_file:
-            print("Processing file {}".format(csvgz_file))
 
-            result1, result2 = process_csv_gz2(csvgz_file, get_locations_and_transfers)
+
+        print("Processing file {}".format(csvgz_file))
+
+        result1, result2 = process_csv_gz2(csvgz_file, get_locations_and_transfers)
+        final_result1 += result1
+        final_result2 += result2
             # print(list(get_min_max_2col(result)))
 
         # file_name = csvgz_file.split("\\")[-1]
