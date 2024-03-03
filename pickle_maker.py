@@ -116,8 +116,29 @@ def remove_zero_rows_from_distances(all_distances):
             nz_index_list.append(index)
     return [all_distances[i] for i in nz_index_list], [all_distances[i] for i in zeroes_index_list]
 
+# generates a new shrink_unique_denylist that has the unique integer mapping instead of full gateway address
+def create_shrink_denylist():
 
+    shrink_denylist = []
+    denylist_filepath = r'D:\denylists\unique_denylist.pickle'
+    mapping_filepath = r'D:\blockchain-etl-export\transactions\shrink_gateway_mapping.pickle'
+    shrink_denylist_filepath = r'D:\denylists\shrink_unique_denylist.pickle'
 
+    with open(denylist_filepath, 'rb') as file:
+        denylist = pickle.load(file)
+
+    with open(mapping_filepath, 'rb') as file:
+        shrink_gateway_mapping = pickle.load(file)
+
+    for item in denylist:
+        print(item)
+        if item in shrink_gateway_mapping:
+            shrink_denylist.append(shrink_gateway_mapping[item])
+        else:
+            print(f"{item} not found in shrink_gateway_mapping")
+
+    with open(shrink_denylist_filepath, 'wb') as file:
+        pickle.dump(shrink_denylist, file)
 
 if __name__ == "__main__":
 
