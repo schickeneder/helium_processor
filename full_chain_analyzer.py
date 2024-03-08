@@ -3,6 +3,10 @@ import csv
 import numpy as np
 import code
 import json
+import pickle
+import h3
+import matplotlib.pyplot as plt
+
 from pickle_maker import find_csv_files
 
 # this file is used to process and gather information across the whole blockchain.
@@ -28,6 +32,8 @@ from pickle_maker import find_csv_files
 # in a separate list we want all add_gateways and transfer_hotspots-> gateway_transfers
 # [gateway], [timestamp], [block], [old_owner=0], [new_owner] * if add_gateway, no old owner so 0, new owner = buyer
 
+# a distance row is structured like:
+# [txlocation, location, distance_from_tx_location [,txpwr] [,rxpwr] [,timestamp] [,txgateway] [,wgateway]]
 
 transaction_filepath = r'D:\blockchain-etl-export\transactions'
 
@@ -49,6 +55,54 @@ def get_block_and_times(row):
     time = row[-1]
     return ([block, time])
 
+# returns a dictionary containing a node and all pairwise h3 distances of that node's location to other nodes
+# h3dist_limit sets the threshold beyond which a pair will not be recorded
+# to avoid duplication, a pairwise distance will only be recorded for <node1> < <node2>
+# h3dict maps a location to gateway(s) (node(s))
+def get_pairwise_distances(h3dict, locations, h3dist_limit=100):
+    node_dist_pairs_dict = {}
+    for row in locations:
+        origin_node = row[0]
+        origin_loc = row[3]
+        node_dist_pairs_dict[origin_node] = []
+        h3cells = h3.k_ring(origin_loc,h3dist_limit)
+        for h3cell in h3cells:
+            if h3cell in h3dict:
+                for remote_node in h3dict[h3cell]:
+                    if remote_node < origin_node:
+                        node_dist_pairs_dict[origin_node].append(h3.h3_distance(origin_loc,h3cell))
+
+    return node_dist_pairs_dict
+
+
+# creates a dictionary of h3cells based on a location list, where location list is:
+# [gateway], [timestamp], [block], [location], [owner], [gain?], [elevation?]
+# and dictionary is like "<h3cell1>": [node1, node2, ..]
+def populate_h3cells(locations, block_limit = 0, timestamp = 0):
+    h3dict = {}
+
+    if timestamp:
+        for row in locations:
+            if int(row[1]) < timestamp:
+                if row[3] in h3dict:
+                    h3dict[row[3]].append(row[0])
+                else:
+                    h3dict[row[3]] = [row[0]]
+    elif block_limit:
+        for row in locations:
+            if int(row[2]) < block_limit:
+                if row[3] in h3dict:
+                    h3dict[row[3]].append(row[0])
+                else:
+                    h3dict[row[3]] = [row[0]]
+    else:
+        for row in locations:
+            if row[3] in h3dict:
+                h3dict[row[3]].append(row[0])
+            else:
+                h3dict[row[3]] = [row[0]]
+
+    return h3dict
 
 # returns location or transfer if the row contains it
 # result1 is location, result2 is transfer
@@ -56,7 +110,7 @@ def get_block_and_times(row):
 # [gateway], [timestamp], [block], [location], [owner], [gain?], [elevation?]
 
 # transfer list
-
+# [gateway], [timestamp], [block], [old_owner=0], [new_owner]
 def get_locations_and_transfers(row):
     if len(row) >= 5:
         transaction_type = row[2]
@@ -153,23 +207,66 @@ def get_min_max_2col(list):
     return (array[min_column_indices[0]].tolist(), array[min_column_indices[1]].tolist(),
             array[max_column_indices[0]].tolist(), array[max_column_indices[1]].tolist())
 
+# get histogram of
+def get_witness_h3distance_frequency_distribution(distances):
+    h3_dist_dict = {}
+
+
+    for row in distances:
+        try:
+            h3_dist = h3.h3_distance(row[0],row[1])
+        except:
+            print(f"Could not compute dist for {row[0]} {row[1]}")
+            continue
+        if h3_dist not in h3_dist_dict:
+            h3_dist_dict[h3_dist] = 1
+        else:
+            h3_dist_dict[h3_dist] += 1
+
+    return h3_dist_dict
+
+def plot_hist(freq_dist_data):
+    samples = list(freq_dist_data.keys())
+    frequencies = list(freq_dist_data.values())
+
+    plt.bar(samples, frequencies, color='skyblue')
+    plt.show()
+
+# receives a distances list (last two columns are tx and w gateway addresses)
+#   returns a new list with the denylist elements removed
+# make sure input_list and denylist are both either shrink or regular
+def denylist_filter_distances_list(input_list, denylist):
+    new_list = []
+
+    for element in input_list:
+        txgateway = element[-2]
+        wgateway = element[-1]
+
+        if txgateway in denylist or wgateway in denylist:
+            continue
+        else:
+            new_list.append(element)
+
+    return new_list
+
+
 
 if __name__ == "__main__":
 
-    csvgz_files = find_csv_files(transaction_filepath)
-
-    final_result1 = []
-    final_result2 = []
-    for csvgz_file in csvgz_files:
-
-
-
-        print("Processing file {}".format(csvgz_file))
-
-        result1, result2 = process_csv_gz2(csvgz_file, get_locations_and_transfers)
-        final_result1 += result1
-        final_result2 += result2
-            # print(list(get_min_max_2col(result)))
+    # csvgz_files = find_csv_files(transaction_filepath)
+    #
+    # final_result1 = []
+    # final_result2 = []
+    # for csvgz_file in csvgz_files:
+    #
+    #
+    #
+    #     print("Processing file {}".format(csvgz_file))
+    #
+    #     result1, result2 = process_csv_gz2(csvgz_file, get_locations_and_transfers)
+    #     final_result1 += result1
+    #     final_result2 += result2
+    #         # print(list(get_min_max_2col(result)))
 
         # file_name = csvgz_file.split("\\")[-1]
         # pickle_file_name = 'node_dict-' + file_name.split('.')[0] + '.pickle'
@@ -183,5 +280,31 @@ if __name__ == "__main__":
         #         print("Pickle file {} already exists, skipping..".format(pickle_file_path))
         # else: # just process but don't write
         #     node_dict = build_node_dict(csvgz_file)
+
+    # distances_filepath = transaction_filepath + "\shrink_distances_10000.pickle"
+    # with open(distances_filepath, 'rb') as file:
+    #             distances = pickle.load(file)
+    #
+    # with open(r'D:\blockchain-etl-export\transactions\shrink_gateway_mapping.pickle', 'rb') as file:
+    #             shrink_denylist = pickle.load(file)
+    #
+    # new_distances = denylist_filter_distances_list(distances, shrink_denylist)
+    #
+    # results = get_witness_h3distance_frequency_distribution(new_distances)
+    #
+    # #print(f"Average count {np.mean(np.array(list(results.values())))}, stdev {np.std(np.array(list(results.values)))}")
+    # plot_hist(results)
+
+
+    locations_filepath = transaction_filepath + "\locations.pickle"
+    with open(locations_filepath, 'rb') as file:
+                locations = pickle.load(file)
+
+    h3dict = populate_h3cells(locations, block_limit=500000)
+
+    results = get_pairwise_distances(h3dict,locations,100)
+    # print(len(h3cells))
+
+    # this is REALLY slow.. can we fix it with matrix multiplication? numpy?
 
     code.interact(local=locals())
