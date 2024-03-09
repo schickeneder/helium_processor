@@ -6,6 +6,9 @@ import json
 import pickle
 import h3
 import matplotlib.pyplot as plt
+import time
+import multiprocessing
+
 
 from pickle_maker import find_csv_files
 
@@ -61,7 +64,12 @@ def get_block_and_times(row):
 # h3dict maps a location to gateway(s) (node(s))
 def get_pairwise_distances(h3dict, locations, h3dist_limit=100):
     node_dist_pairs_dict = {}
+    count = 0
+    total_rows = len(locations)
     for row in locations:
+        if count%100000 == 0:
+            print(f"Processing row {count}/{total_rows}")
+        count += 1
         origin_node = row[0]
         origin_loc = row[3]
         node_dist_pairs_dict[origin_node] = []
@@ -74,6 +82,37 @@ def get_pairwise_distances(h3dict, locations, h3dist_limit=100):
 
     return node_dist_pairs_dict
 
+# single location version of the function, for use with multi below
+def get_pairwise_distances_multi_helper(h3dict, row):
+    #global h3dict
+    global h3dist_limit
+    node_dist_pairs_dict_single = {}
+
+    #print(f"h3dict {h3dict}")
+
+    origin_node = row[0]
+    origin_loc = row[3]
+    node_dist_pairs_dict_single[origin_node] = []
+    h3cells = h3.k_ring(origin_loc, h3dist_limit)
+    for h3cell in h3cells:
+        #print(f"processing h3cell {h3cell}")
+        if h3cell in h3dict:
+            #print(f"h3cell {h3cell} found in dict")
+            for remote_node in h3dict[h3cell]:
+                if remote_node < origin_node:
+                    node_dist_pairs_dict_single[origin_node].append(h3.h3_distance(origin_loc, h3cell))
+
+    return node_dist_pairs_dict_single
+def get_pairwise_distances_multi(h3dict,locations):
+    node_dist_pairs_dict = {}
+
+    with multiprocessing.Pool(processes=32) as pool:
+        results = pool.starmap(get_pairwise_distances_multi_helper, [(h3dict,location) for location in locations])
+
+    for item in results:
+        node_dist_pairs_dict.update(item)
+
+    return node_dist_pairs_dict
 
 # creates a dictionary of h3cells based on a location list, where location list is:
 # [gateway], [timestamp], [block], [location], [owner], [gain?], [elevation?]
@@ -249,7 +288,14 @@ def denylist_filter_distances_list(input_list, denylist):
 
     return new_list
 
+def update_h3dict(new_dict):
+    global h3dict
+    h3dict = new_dict
 
+
+block_limit = 100000
+h3dist_limit = 30
+h3dict = {}
 
 if __name__ == "__main__":
 
@@ -296,13 +342,19 @@ if __name__ == "__main__":
     # plot_hist(results)
 
 
+    start_time = time.time()
+
     locations_filepath = transaction_filepath + "\locations.pickle"
     with open(locations_filepath, 'rb') as file:
                 locations = pickle.load(file)
 
-    h3dict = populate_h3cells(locations, block_limit=500000)
+    h3dict = populate_h3cells(locations, block_limit=block_limit)
+    update_h3dict(h3dict)
 
-    results = get_pairwise_distances(h3dict,locations,100)
+    #results = get_pairwise_distances(h3dict,locations, h3dist_limit)
+    results = get_pairwise_distances_multi(h3dict, locations)
+
+    print(f"Elapsed time: {(time.time()-start_time):.2f}s with block_limit {block_limit} and h3dist_limit {h3dist_limit}")
     # print(len(h3cells))
 
     # this is REALLY slow.. can we fix it with matrix multiplication? numpy?
