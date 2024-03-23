@@ -31,8 +31,8 @@ from pickle_maker import find_csv_files
 # transfer_hotspot_v1 keys:  fee, hash type, buyer, seller, gateway, buyer_nonce, amount_to_seller
 # transfer_hotspost_v2 keys:  fee, hash, type, nonce, owner, gateway, new owner
 
-# and what we want to extract -> getway_locations
-# [gateway], [timestamp], [block], [location], [owner], [gain?], [elevation?]
+# and what we want to extract -> gateway_locations
+# [gateway], [timestamp], [block], [h3 location], [owner], [gain?], [elevation?]
 # gateway, 1681206994, 1823309, location, owner, [gain=0], [elevation=0]  * if gain,elevation are 0 that means v1
 
 # in a separate list we want all add_gateways and transfer_hotspots-> gateway_transfers
@@ -387,12 +387,45 @@ def get_percentiles(input_values):
 
     print(f"{results}/{percentiles} are results/percentiles for {len(input_values)} rows in denylist-filtered distances list")
 
+# returns a list like [[sum_distances1,n1,timestamp1],[sum_distances2,n2,timestamp2],..]
+# where sum_distances is the sum of all pairwise distances of all nodes
+# TODO: find some way of determining which nodes are active to include/add/subtract
+def get_location_distance_stats(distance_threshold,as_cp_array = True):
+    with open(r'D:\blockchain-etl-export\transactions\shrink2_gateway_mapping_complete.pickle', 'rb') as file:
+                shrink_gateway_mapping = pickle.load(file)
+    with open(r'D:\blockchain-etl-export\transactions\locations.pickle', 'rb') as file:
+                locations = pickle.load(file)
+
+    print(f"Length of locations and gateway mapping are {len(locations)} and {len(shrink_gateway_mapping)}")
+
+    # [gateway], [timestamp], [block], [h3 location], [owner], [gain?], [elevation?]
+    # convert locations (above) to  [[timestamp], [shrink_gateway], [GPS_lat,GPS_lon]],[[..
+    print("creating shrink_locs")
+
+    # count = 0
+    # for element in locations:
+    #     if not element[0] in shrink_gateway_mapping:
+    #         #print(f"{element[0]} not in shrink_gateway_mapping")
+    #         count += 1
+    # print(f"{count} keys missing from shrink_gateway_mapping; it contains {len(shrink_gateway_mapping)} elements")
+    # # some keys were missing but solved that now..
+    shrink_locs = []
+    for element in locations:
+        lat,lon = h3.h3_to_geo(element[3])
+        shrink_locs.append([int(element[1]), int(shrink_gateway_mapping[element[0]]), lat, lon])
+    if as_cp_array:
+        print("converting to cp.array")
+        return cp.array(shrink_locs)
+    else:
+        return shrink_locs
 
 block_limit = 100000 #1837239
 h3dist_limit = 5
 h3dict = {}
 
 if __name__ == "__main__":
+
+    #---- get locations and transfers
 
     # csvgz_files = find_csv_files(transaction_filepath)
     #
@@ -422,39 +455,43 @@ if __name__ == "__main__":
         # else: # just process but don't write
         #     node_dict = build_node_dict(csvgz_file)
 
-    # histogram or distance percentiles
-
-    distances_filepath = transaction_filepath + "\shrink_distances_nz.pickle"
-    with open(distances_filepath, 'rb') as file:
-                distances = pickle.load(file)
-
-    with open(r'D:\denylists\shrink_unique_denylist.pickle', 'rb') as file:
-                shrink_denylist = pickle.load(file)
-    # with open(r'D:\blockchain-etl-export\transactions\shrink_gateway_mapping.pickle', 'rb') as file:
+    # #---- histogram or witness distance percentiles
+    #
+    # distances_filepath = transaction_filepath + "\shrink_distances_nz.pickle"
+    # with open(distances_filepath, 'rb') as file:
+    #             distances = pickle.load(file)
+    #
+    # with open(r'D:\denylists\shrink_unique_denylist.pickle', 'rb') as file:
     #             shrink_denylist = pickle.load(file)
+    #
+    #
+    # # print(f"First 10 of distances used: {distances[:10]}")
+    # # #print(shrink_denylist)
+    # # print(f"First 10 of shrink_denylist used: {shrink_denylist[:10]}")
+    #
+    #
+    # # row[2] of distances contains the distances between nodes for a witness event
+    # # res, pers = get_percentiles([distance[2] for distance in distances])
+    # # print(f"{res}/{pers} are results/percentiles for {len(distances)} rows in full distances list")
+    #
+    # print("extracted pickl, starting denylist filter")
+    #
+    # new_distances = list(denylist_filter_distances_list_v2(distances, shrink_denylist))
+    # print("Done with denylist_filter")
+    # #new_distances = [distance[2] for distance in distances[not_in_deny_list]]
+    # print("Done extracting just the distance columns")
+    # get_percentiles(new_distances)
+    #
+    # #results = get_witness_h3distance_frequency_distribution(new_distances)
+    #
+    # #print(f"Average count {np.mean(np.array(list(results.values())))}, stdev {np.std(np.array(list(results.values)))}")
+    # #plot_hist(results)
 
-    # print(f"First 10 of distances used: {distances[:10]}")
-    # #print(shrink_denylist)
-    # print(f"First 10 of shrink_denylist used: {shrink_denylist[:10]}")
 
-
-    # row[2] of distances contains the distances between nodes for a witness event
-    # res, pers = get_percentiles([distance[2] for distance in distances])
-    # print(f"{res}/{pers} are results/percentiles for {len(distances)} rows in full distances list")
-
-    print("extracted pickl, starting denylist filter")
-
-    new_distances = list(denylist_filter_distances_list_v2(distances, shrink_denylist))
-    print("Done with denylist_filter")
-    #new_distances = [distance[2] for distance in distances[not_in_deny_list]]
-    print("Done extracting just the distance columns")
-    get_percentiles(new_distances)
-
-    #results = get_witness_h3distance_frequency_distribution(new_distances)
-
-    #print(f"Average count {np.mean(np.array(list(results.values())))}, stdev {np.std(np.array(list(results.values)))}")
-    #plot_hist(results)
-
+    #--------just to get length of node list-----
+    # with open(r'D:\blockchain-etl-export\transactions\shrink_gateway_mapping.pickle', 'rb') as file:
+    #             shrink_gateway_mapping = pickle.load(file)
+    # print(f"len of shrink_gateway_mapping is {len(shrink_gateway_mapping)}")
 
 
     # #----------pairwise distances----------------
@@ -477,5 +514,13 @@ if __name__ == "__main__":
     # print(f"Elapsed time: {(time.time()-start_time):.2f}s with block_limit {block_limit} and h3dist_limit {h3dist_limit}")
     # # print(len(h3cells))
     # # this is REALLY slow.. can we fix it with matrix multiplication? numpy?
+
+    #-----------get average location distance stats-------
+
+    results = get_location_distance_stats(distance_threshold = 50000)
+
+
+    # import locations and convert gateway to shrink_gateway
+    # create cp array, order by timestamp, include shrink_gateway and coord_location
 
     code.interact(local=locals())

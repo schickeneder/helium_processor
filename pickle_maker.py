@@ -75,7 +75,7 @@ def sort_distances(all_distances):
     all_distances.sort(key=lambda x: x[5])
     return all_distances
 
-# replaces gateway identifies with numbers to save storage
+# replaces gateway identifiers with numbers to save storage
 # best to pre-sort the input so the numbering scheme makes sense
 # returns shortened all distances and gateway mapping
 def shrink_gateways(all_distances):
@@ -149,7 +149,8 @@ if __name__ == "__main__":
     combine_distances_on = False
     shrink_all_distances_on = False
     remove_zero_rows_from_distances_on = False
-    make_random_pickles_on = True
+    make_random_pickles_on = False
+    make_shrink_gateway_mapping_from_locations_on = True
 
 
     # (1) ***** PICKLE node_dict of type HeliumNode *****
@@ -307,6 +308,23 @@ if __name__ == "__main__":
         with open(new_pickle_file_path, 'wb') as file:
             pickle.dump(list10000, file)
 
+    if make_shrink_gateway_mapping_from_locations_on:
+    # locations like:
+    # [gateway], [timestamp], [block], [h3 location], [owner], [gain?], [elevation?]
+        new_shrink_gateway_mapping = {}
+        count = 0
+        load_pickle_file_path = transaction_filepath + "\\locations.pickle"
+        with open(load_pickle_file_path, 'rb') as file:
+            locations = pickle.load(file)
+        short_list = [[row[1],row[0]] for row in locations]
+        short_list.sort()
+        for row in short_list:
+            if row[1] not in new_shrink_gateway_mapping:
+                new_shrink_gateway_mapping[row[1]] = count
+                count += 1
+        new_pickle_file_path = transaction_filepath + "\\shrink_gateway_mapping_complete.pickle"
+        with open(new_pickle_file_path, 'wb') as file:
+            pickle.dump(new_shrink_gateway_mapping, file)
 
 
 
