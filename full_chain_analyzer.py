@@ -387,6 +387,58 @@ def get_percentiles(input_values):
 
     print(f"{results}/{percentiles} are results/percentiles for {len(input_values)} rows in denylist-filtered distances list")
 
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """
+    Calculate the great-circle distance between two points
+    on the Earth's surface using the Haversine formula.
+    """
+    # Convert latitude and longitude from degrees to radians
+    lat1, lon1, lat2, lon2 = cp.radians(lat1), cp.radians(lon1), cp.radians(lat2), cp.radians(lon2)
+
+    # Haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = cp.sin(dlat / 2) ** 2 + cp.cos(lat1) * cp.cos(lat2) * cp.sin(dlon / 2) ** 2
+    c = 2 * cp.arcsin(cp.sqrt(a))
+    r = 6371  # Radius of the Earth in kilometers
+    return c * r
+
+def compute_distances(coords_list1, coords_list2,threshold):
+    """
+    Compute distances between every coordinate in coords_list1 to every coordinate in coords_list2.
+
+    Parameters:
+    - coords_list1 (tuple or list): Tuple or list of two CuPy arrays containing latitude and longitude coordinates.
+    - coords_list2 (tuple or list): Tuple or list of two CuPy arrays containing latitude and longitude coordinates.
+
+    Returns:
+    - distances (cupy.ndarray): 2D array containing distances between each pair of coordinates.
+    """
+    print(coords_list1)
+    print(coords_list2)
+    latitudes1 = coords_list1[:,0]
+    longitudes1 = coords_list1[:,1]
+    latitudes2 = coords_list2[:,0]
+    longitudes2 = coords_list2[:,1]
+
+    # Expand dimensions to perform broadcasting
+    latitudes1 = latitudes1[:, cp.newaxis]
+    longitudes1 = longitudes1[:, cp.newaxis]
+    latitudes2 = latitudes2[cp.newaxis, :]
+    longitudes2 = longitudes2[cp.newaxis, :]
+
+    # Compute distances using Haversine formula
+    distances = haversine_distance(latitudes1, longitudes1, latitudes2, longitudes2)
+
+    #print(f"distances {len(distances)} with shape {distances.shape}")
+
+    filtered_distances = distances[distances < threshold]
+
+    #print(f"filtered_distances {len(filtered_distances)} with shape {filtered_distances.shape}")
+
+    #return sum of filtered_distances
+    return cp.sum(filtered_distances)
+
 # returns a list like [[sum_distances1,n1,timestamp1],[sum_distances2,n2,timestamp2],..]
 # where sum_distances is the sum of all pairwise distances of all nodes
 # TODO: find some way of determining which nodes are active to include/add/subtract
@@ -396,28 +448,93 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
     with open(r'D:\blockchain-etl-export\transactions\locations.pickle', 'rb') as file:
                 locations = pickle.load(file)
 
-    print(f"Length of locations and gateway mapping are {len(locations)} and {len(shrink_gateway_mapping)}")
+    threshold = 50000
 
+    print(f"Length of locations and gateway mapping are {len(locations)} and {len(shrink_gateway_mapping)}")
+    #print(f"{locations[:10]}")
     # [gateway], [timestamp], [block], [h3 location], [owner], [gain?], [elevation?]
-    # convert locations (above) to  [[timestamp], [shrink_gateway], [GPS_lat,GPS_lon]],[[..
+    # convert locations (above) to  [[timestamp], [shrink_gateway], [GPS_lat], [GPS_lon]],[[..
     print("creating shrink_locs")
 
-    # count = 0
-    # for element in locations:
-    #     if not element[0] in shrink_gateway_mapping:
-    #         #print(f"{element[0]} not in shrink_gateway_mapping")
-    #         count += 1
-    # print(f"{count} keys missing from shrink_gateway_mapping; it contains {len(shrink_gateway_mapping)} elements")
-    # # some keys were missing but solved that now..
     shrink_locs = []
     for element in locations:
         lat,lon = h3.h3_to_geo(element[3])
         shrink_locs.append([int(element[1]), int(shrink_gateway_mapping[element[0]]), lat, lon])
-    if as_cp_array:
-        print("converting to cp.array")
-        return cp.array(shrink_locs)
-    else:
-        return shrink_locs
+    # contains 2394251 rows, but only 964079 rows with unique gateways (that's the total number of gateways anyway)
+    #  meaning many nodes move around..
+
+    #is_in_denylist = cp.any(cp.isin(array, denylist_cp), axis=1)
+
+    #print(shrink_locs[:10])
+
+    cp_current_nodes = cp.empty((0,3),dtype=cp.float32) # stores [[shrink_gateway, lat, long],...]
+    cp_dist_stats = cp.empty((0,3)) # stores [[sum(distances), #gateways, timestamp],...]
+
+    cp_shrink_locs = cp.array(shrink_locs,dtype=cp.float32)
+    #print(cp_shrink_locs[:10])
+
+    print("Created cp_shrink_locs")
+
+    for row in cp_shrink_locs:
+        #print(row[1:])
+        cp_row = cp.array(row[1:])
+
+        if cp_current_nodes.size > 0: # there is at least 1 node already
+            print("Found node size > 0")
+
+            print(f"else multi-row, cp_current_node(s) and cp_row[0]: {cp_current_nodes} and {cp_row[0]}")
+            print(f"and cp_current_nodes[:,1:] and cp_row[1:]: {cp_current_nodes[:,1:]} and {cp_row[1:]}")
+
+            current_gateway = cp.equal(cp_current_nodes[:,0],cp_row[0]) # like return [False, False, True, False..]
+            new_dists = compute_distances(cp.array([cp_row[1:]]), cp_current_nodes[:,1:], threshold)
+            tmp_dist_stat_row = cp_dist_stats[-1]  # current sum and info contained in most recent/last row
+
+            # if cp_dist_stats.size > 0: # if this isn't the first time adding a row
+            #     tmp_dist_stat_row = cp_dist_stats[-1]  # current sum and info contained in most recent/last row
+            # else: # this is the first to add..
+            #     #print(f"This is throwing the error new dists {new_dists}, row[0] {row[0]}")
+            #     tmp = [float(new_dists),float(2),float(row[0])]
+            #     cp_dist_stats = cp.array(tmp,dtype=cp.float32)
+
+
+            if cp.any(current_gateway): # if current gateway already there, this is a move..
+                # TODO: it's never getting, here, so that means the cp.equal above isn't working.. for floats?
+                print("found cp.any!")
+                # get existing coordinates
+                existing_gateway_row = cp_current_nodes[current_gateway] # row containing that gateway and coordinates
+                current_dists = compute_distances(existing_gateway_row[1:],cp_current_nodes[:,1:],threshold)
+                # change new coordinates
+                cp_current_nodes[current_gateway] = row[1:] # update with the new coordinates; it moved
+                # calculate values and make the new stat row to append
+                new_dist_stat_row = cp.array([(tmp_dist_stat_row[0]- current_dists + new_dists),tmp_dist_stat_row[1],row[0]])
+            else:
+                print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
+                print(f"cp_dist_stats {cp_dist_stats}")
+                tmp = [[float(tmp_dist_stat_row[0]), float(tmp_dist_stat_row[1]+1), float(row[0])]]
+                new_dist_stat_row = cp.array(tmp,dtype=cp.float32)
+                # calculate and add values, append this..
+            print(f"cp_dist_stats and new_dist_stat row {cp_dist_stats} {new_dist_stat_row}")
+            cp.concatenate((cp_dist_stats,new_dist_stat_row),axis=0)
+            print(f"cp_dist_stats after concat {cp_dist_stats}")
+        else:
+            cp_current_nodes = cp.array([row[1:]]) # this will be the first node (2D array with 1 row)
+            tmp = [[float(0), float(1), float(row[0])]]
+            cp_dist_stats = cp.array(tmp,dtype=cp.float32)
+            continue
+        print(f"cp_current nodes {cp_current_nodes} and cp_row {cp_row}")
+        cp.concatenate((cp_current_nodes,cp_row),axis=0) # TODO: maybe this one isn't working??
+        print(f"cp_current nodes {cp_current_nodes} after concat")
+
+    print(cp_dist_stats[:10])
+    print(cp_current_nodes[:10])
+
+    return cp_dist_stats
+
+    # if as_cp_array:
+    #     print("converting to cp.array")
+    #     return cp.array(shrink_locs)
+    # else:
+    #     return shrink_locs
 
 block_limit = 100000 #1837239
 h3dist_limit = 5
