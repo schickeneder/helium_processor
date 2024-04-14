@@ -511,10 +511,11 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
                 print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
                 print(f"cp_dist_stats {cp_dist_stats}")
                 tmp = [[float(tmp_dist_stat_row[0]), float(tmp_dist_stat_row[1]+1), float(row[0])]]
+                # can either use the [[]] to make it a 2d array in the next line or do tmp[None,:] when concat'ing
                 new_dist_stat_row = cp.array(tmp,dtype=cp.float32)
                 # calculate and add values, append this..
             print(f"cp_dist_stats and new_dist_stat row {cp_dist_stats} {new_dist_stat_row}")
-            cp.concatenate((cp_dist_stats,new_dist_stat_row),axis=0)
+            cp_dist_stats = cp.concatenate((cp_dist_stats,new_dist_stat_row),axis=0)
             print(f"cp_dist_stats after concat {cp_dist_stats}")
         else:
             cp_current_nodes = cp.array([row[1:]]) # this will be the first node (2D array with 1 row)
@@ -522,7 +523,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
             cp_dist_stats = cp.array(tmp,dtype=cp.float32)
             continue
         print(f"cp_current nodes {cp_current_nodes} and cp_row {cp_row}")
-        cp.concatenate((cp_current_nodes,cp_row),axis=0) # TODO: maybe this one isn't working??
+        cp_current_nodes = cp.concatenate((cp_current_nodes,cp_row[None,:]),axis=0)
         print(f"cp_current nodes {cp_current_nodes} after concat")
 
     print(cp_dist_stats[:10])
