@@ -414,8 +414,8 @@ def compute_distances(coords_list1, coords_list2,threshold):
     Returns:
     - distances (cupy.ndarray): 2D array containing distances between each pair of coordinates.
     """
-    print(coords_list1)
-    print(coords_list2)
+    #print(coords_list1)
+    #print(coords_list2)
     latitudes1 = coords_list1[:,0]
     longitudes1 = coords_list1[:,1]
     latitudes2 = coords_list2[:,0]
@@ -448,7 +448,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
     with open(r'D:\blockchain-etl-export\transactions\locations.pickle', 'rb') as file:
                 locations = pickle.load(file)
 
-    threshold = 50000
+    threshold = distance_threshold
 
     print(f"Length of locations and gateway mapping are {len(locations)} and {len(shrink_gateway_mapping)}")
     #print(f"{locations[:10]}")
@@ -480,10 +480,10 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
         cp_row = cp.array(row[1:])
 
         if cp_current_nodes.size > 0: # there is at least 1 node already
-            print("Found node size > 0")
+            #print("Found node size > 0")
 
-            print(f"else multi-row, cp_current_node(s) and cp_row[0]: {cp_current_nodes} and {cp_row[0]}")
-            print(f"and cp_current_nodes[:,1:] and cp_row[1:]: {cp_current_nodes[:,1:]} and {cp_row[1:]}")
+            #print(f"else multi-row, cp_current_node(s) and cp_row[0]: {cp_current_nodes} and {cp_row[0]}")
+            #print(f"and cp_current_nodes[:,1:] and cp_row[1:]: {cp_current_nodes[:,1:]} and {cp_row[1:]}")
 
             current_gateway = cp.equal(cp_current_nodes[:,0],cp_row[0]) # like return [False, False, True, False..]
             new_dists = compute_distances(cp.array([cp_row[1:]]), cp_current_nodes[:,1:], threshold)
@@ -499,7 +499,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
 
             if cp.any(current_gateway): # if current gateway already there, this is a move..
                 # TODO: it's never getting, here, so that means the cp.equal above isn't working.. for floats?
-                print("found cp.any!")
+                #print("found cp.any!")
                 # get existing coordinates
                 existing_gateway_row = cp_current_nodes[current_gateway] # row containing that gateway and coordinates
                 current_dists = compute_distances(existing_gateway_row[1:],cp_current_nodes[:,1:],threshold)
@@ -508,23 +508,23 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
                 # calculate values and make the new stat row to append
                 new_dist_stat_row = cp.array([(tmp_dist_stat_row[0]- current_dists + new_dists),tmp_dist_stat_row[1],row[0]])
             else:
-                print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
-                print(f"cp_dist_stats {cp_dist_stats}")
-                tmp = [[float(tmp_dist_stat_row[0]), float(tmp_dist_stat_row[1]+1), float(row[0])]]
+                #print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
+                #print(f"cp_dist_stats {cp_dist_stats}")
+                tmp = [float(tmp_dist_stat_row[0]+new_dists), float(tmp_dist_stat_row[1]+1), float(row[0])]
                 # can either use the [[]] to make it a 2d array in the next line or do tmp[None,:] when concat'ing
                 new_dist_stat_row = cp.array(tmp,dtype=cp.float32)
                 # calculate and add values, append this..
-            print(f"cp_dist_stats and new_dist_stat row {cp_dist_stats} {new_dist_stat_row}")
-            cp_dist_stats = cp.concatenate((cp_dist_stats,new_dist_stat_row),axis=0)
-            print(f"cp_dist_stats after concat {cp_dist_stats}")
+            #print(f"cp_dist_stats and new_dist_stat row {cp_dist_stats} {new_dist_stat_row}")
+            cp_dist_stats = cp.concatenate((cp_dist_stats,new_dist_stat_row[None,:]),axis=0)
+            #print(f"cp_dist_stats after concat {cp_dist_stats}")
         else:
             cp_current_nodes = cp.array([row[1:]]) # this will be the first node (2D array with 1 row)
-            tmp = [[float(0), float(1), float(row[0])]]
+            tmp = [[float(0), float(1), float(row[0])]] # for the first one use [[]] instead of row[None,:]
             cp_dist_stats = cp.array(tmp,dtype=cp.float32)
             continue
-        print(f"cp_current nodes {cp_current_nodes} and cp_row {cp_row}")
+        #print(f"cp_current nodes {cp_current_nodes} and cp_row {cp_row}")
         cp_current_nodes = cp.concatenate((cp_current_nodes,cp_row[None,:]),axis=0)
-        print(f"cp_current nodes {cp_current_nodes} after concat")
+        #print(f"cp_current nodes {cp_current_nodes} after concat")
 
     print(cp_dist_stats[:10])
     print(cp_current_nodes[:10])
@@ -635,7 +635,7 @@ if __name__ == "__main__":
 
     #-----------get average location distance stats-------
 
-    results = get_location_distance_stats(distance_threshold = 50000)
+    results = get_location_distance_stats(distance_threshold = 500000)
 
 
     # import locations and convert gateway to shrink_gateway
