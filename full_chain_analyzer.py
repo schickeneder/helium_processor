@@ -471,6 +471,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
     cp_dist_stats = cp.empty((0,3)) # stores [[sum(distances), #gateways, timestamp],...]
 
     cp_shrink_locs = cp.array(shrink_locs,dtype=cp.float32)
+    #like array([timestamp, gateway, lat, lon])
     #print(cp_shrink_locs[:10])
 
     print("Created cp_shrink_locs")
@@ -498,7 +499,6 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
 
 
             if cp.any(current_gateway): # if current gateway already there, this is a move..
-                # TODO: it's never getting, here, so that means the cp.equal above isn't working.. for floats?
                 #print("found cp.any!")
                 # get existing coordinates
                 existing_gateway_row = cp_current_nodes[current_gateway] # row containing that gateway and coordinates
@@ -507,24 +507,23 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
                 cp_current_nodes[current_gateway] = row[1:] # update with the new coordinates; it moved
                 # calculate values and make the new stat row to append
                 new_dist_stat_row = cp.array([(tmp_dist_stat_row[0]- current_dists + new_dists),tmp_dist_stat_row[1],row[0]])
-            else:
+            else: # it's a new node to add
                 #print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
                 #print(f"cp_dist_stats {cp_dist_stats}")
                 tmp = [float(tmp_dist_stat_row[0]+new_dists), float(tmp_dist_stat_row[1]+1), float(row[0])]
                 # can either use the [[]] to make it a 2d array in the next line or do tmp[None,:] when concat'ing
                 new_dist_stat_row = cp.array(tmp,dtype=cp.float32)
                 # calculate and add values, append this..
+                cp_current_nodes = cp.concatenate((cp_current_nodes, cp_row[None, :]), axis=0)
+
             #print(f"cp_dist_stats and new_dist_stat row {cp_dist_stats} {new_dist_stat_row}")
             cp_dist_stats = cp.concatenate((cp_dist_stats,new_dist_stat_row[None,:]),axis=0)
             #print(f"cp_dist_stats after concat {cp_dist_stats}")
-        else:
+        else: # this is the first node, so create the two arrays
             cp_current_nodes = cp.array([row[1:]]) # this will be the first node (2D array with 1 row)
-            tmp = [[float(0), float(1), float(row[0])]] # for the first one use [[]] instead of row[None,:]
+            tmp = [[float(0), float(1), float(row[0])]] # for the first one we arbitrarily use [[]] instead of row[None,:]
             cp_dist_stats = cp.array(tmp,dtype=cp.float32)
             continue
-        #print(f"cp_current nodes {cp_current_nodes} and cp_row {cp_row}")
-        cp_current_nodes = cp.concatenate((cp_current_nodes,cp_row[None,:]),axis=0)
-        #print(f"cp_current nodes {cp_current_nodes} after concat")
 
     print(cp_dist_stats[:10])
     print(cp_current_nodes[:10])
