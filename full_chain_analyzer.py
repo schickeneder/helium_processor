@@ -437,7 +437,7 @@ def compute_distances(coords_list1, coords_list2,threshold):
     #print(f"filtered_distances {len(filtered_distances)} with shape {filtered_distances.shape}")
 
     #return sum of filtered_distances
-    return cp.sum(filtered_distances)
+    return cp.sum(filtered_distances), len(filtered_distances)
 
 # returns a list like [[sum_distances1,n1,timestamp1],[sum_distances2,n2,timestamp2],..]
 # where sum_distances is the sum of all pairwise distances of all nodes
@@ -468,7 +468,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
     #print(shrink_locs[:10])
 
     cp_current_nodes = cp.empty((0,3),dtype=cp.float32) # stores [[shrink_gateway, lat, long],...]
-    cp_dist_stats = cp.empty((0,3)) # stores [[sum(distances), #gateways, timestamp],...]
+    cp_dist_stats = cp.empty((0,4)) # stores [[sum(distances), #gateways, #segments, timestamp],...]
 
     cp_shrink_locs = cp.array(shrink_locs,dtype=cp.float32)
     #like array([timestamp, gateway, lat, lon])
@@ -487,7 +487,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
             #print(f"and cp_current_nodes[:,1:] and cp_row[1:]: {cp_current_nodes[:,1:]} and {cp_row[1:]}")
 
             current_gateway = cp.equal(cp_current_nodes[:,0],cp_row[0]) # like return [False, False, True, False..]
-            new_dists = compute_distances(cp.array([cp_row[1:]]), cp_current_nodes[:,1:], threshold)
+            new_dists, new_segments = compute_distances(cp.array([cp_row[1:]]), cp_current_nodes[:,1:], threshold)
             tmp_dist_stat_row = cp_dist_stats[-1]  # current sum and info contained in most recent/last row
 
             # if cp_dist_stats.size > 0: # if this isn't the first time adding a row
@@ -502,17 +502,19 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
                 #print("found cp.any!")
                 # get existing coordinates
                 existing_gateway_row = cp_current_nodes[current_gateway] # row containing that gateway and coordinates
-                current_dists = compute_distances(existing_gateway_row[1:],cp_current_nodes[:,1:],threshold)
+                current_dists, current_segments = compute_distances(existing_gateway_row[1:],cp_current_nodes[:,1:],threshold)
                 # change new coordinates
                 cp_current_nodes[current_gateway] = row[1:] # update with the new coordinates; it moved
                 # calculate values and make the new stat row to append
-                new_dist_stat_row = cp.array([(tmp_dist_stat_row[0]- current_dists + new_dists),tmp_dist_stat_row[1],row[0]])
+                new_dist_stat_row = cp.array([(tmp_dist_stat_row[0] - current_dists + new_dists), tmp_dist_stat_row[1],
+                                              (tmp_dist_stat_row[2] - current_segments + new_segments), row[0]])
             else: # it's a new node to add
                 #print(f"tmp_dist_stat_row and row {tmp_dist_stat_row} {row}")
                 #print(f"cp_dist_stats {cp_dist_stats}")
-                tmp = [float(tmp_dist_stat_row[0]+new_dists), float(tmp_dist_stat_row[1]+1), float(row[0])]
+                tmp = [float(tmp_dist_stat_row[0]+new_dists), float(tmp_dist_stat_row[1]+1),
+                       float(tmp_dist_stat_row[2] + new_segments), float(row[0])]
                 # can either use the [[]] to make it a 2d array in the next line or do tmp[None,:] when concat'ing
-                new_dist_stat_row = cp.array(tmp,dtype=cp.float32)
+                new_dist_stat_row = cp.array(tmp, dtype=cp.float32)
                 # calculate and add values, append this..
                 cp_current_nodes = cp.concatenate((cp_current_nodes, cp_row[None, :]), axis=0)
 
@@ -521,7 +523,7 @@ def get_location_distance_stats(distance_threshold,as_cp_array = True):
             #print(f"cp_dist_stats after concat {cp_dist_stats}")
         else: # this is the first node, so create the two arrays
             cp_current_nodes = cp.array([row[1:]]) # this will be the first node (2D array with 1 row)
-            tmp = [[float(0), float(1), float(row[0])]] # for the first one we arbitrarily use [[]] instead of row[None,:]
+            tmp = [[float(0), float(1), float(0), float(row[0])]] # for the first one we arbitrarily use [[]] instead of row[None,:]
             cp_dist_stats = cp.array(tmp,dtype=cp.float32)
             continue
 
@@ -542,6 +544,7 @@ h3dict = {}
 
 if __name__ == "__main__":
 
+    cp.cuda.Device(0).use()
     #---- get locations and transfers
 
     # csvgz_files = find_csv_files(transaction_filepath)
