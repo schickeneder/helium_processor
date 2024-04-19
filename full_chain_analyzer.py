@@ -634,7 +634,7 @@ if __name__ == "__main__":
 
     #-----------get average location distance stats-------
 
-    results = get_location_distance_stats(distance_threshold = 500000)
+    results = get_location_distance_stats(distance_threshold = 50000)
 
 
     # import locations and convert gateway to shrink_gateway
